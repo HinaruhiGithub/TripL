@@ -8,4 +8,8 @@ class View @Inject constructor(){
     fun ShowMap(){
  //       MainActivity.getInstance().ShowBaseMap()
     }
+
+    fun ZoomMap(magnitude: Float) {
+        MainActivity.getInstance().ZoomMap(magnitude)
+    }
 }

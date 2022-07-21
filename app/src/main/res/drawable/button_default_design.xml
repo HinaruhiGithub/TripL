@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape>
+            <!-- グラデーション 今機能してない -->
+            <gradient android:angle="90" />
+            <gradient android:startColor="#FFBBBB" />
+            <gradient android:endColor="#FFFFFF" />
+
+            <!-- パディング -->
+            <padding android:left="16dp" />
+            <padding android:right="16dp" />
+            <padding android:top="16dp" />
+            <padding android:bottom="16dp" />
+
+            <!-- ボタンの周り色の設定 -->
+            <stroke android:color="#f1be43" />
+            <stroke android:width="4dp" />
+            <!-- ボタン背景色の指定 -->
+            <solid android:color="#40F1BE44" />
+
+            <!-- ボタンの角丸を設定 -->
+            <corners android:radius="64dp" />
+
+
+        </shape>
+    </item>
+</selector>

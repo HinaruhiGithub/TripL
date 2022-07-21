@@ -1,6 +1,7 @@
 package com.example.tripjump.Destination.Search
 
 import android.location.Location
+import com.example.tripjump.Category.IGetURLStringCategory
 import com.example.tripjump.MainActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -11,7 +12,7 @@ class RequestAcception @Inject constructor(private val provider: Provider): ITes
 
     private var nowLocation: Location? = null
 
-    override fun RequestAccept() = runBlocking() {
+    override fun RequestAccept(category: IGetURLStringCategory) = runBlocking() {
         //現在地取得するまで待つ
         launch(Dispatchers.Default) {
             nowLocation = MainActivity.getInstance().JustCallPosition()
@@ -20,6 +21,6 @@ class RequestAcception @Inject constructor(private val provider: Provider): ITes
         val location: Location = nowLocation ?: run{
             throw NullPointerException("location couldn't catch")
         }
-        provider.StartSearching(location)
+        provider.StartSearching(location, category)
     }
 }

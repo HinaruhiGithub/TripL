@@ -10,5 +10,6 @@ class Presenter @Inject constructor(private val provider: Provider, private val 
     init{
         Log.d(TAG, "I Called!!")
         provider.showListener = view::ShowMap
+        provider.zoomListner = view::ZoomMap
     }
 }

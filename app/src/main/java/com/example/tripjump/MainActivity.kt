@@ -2,10 +2,10 @@ package com.example.tripjump
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
+import android.nfc.Tag
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Handler
@@ -14,17 +14,18 @@ import android.util.Log
 import com.example.tripjump.Destination.BaseMap.IShowBaseMap
 import com.example.tripjump.Destination.PlaceCollection.ISetPlace
 import com.example.tripjump.Destination.WaitShow.IShowWait
-import android.view.View
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.core.os.HandlerCompat.postDelayed
-import com.example.tripjump.Destination.BaseMap.Presenter
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentManager
+import com.example.tripjump.Category.IGetViewCategory
+import com.example.tripjump.Category.InputAccepter
+import com.example.tripjump.Category.OnlyKeywordCategory
+import com.example.tripjump.Category.Usecase
 import com.example.tripjump.Destination.PlaceCollection.Destination
 import com.example.tripjump.Destination.Search.IRequireNowPosition
-import com.example.tripjump.Destination.Search.ITestRequest
-import com.example.tripjump.Destination.Search.Provider
 import com.example.tripjump.Destination.Search.RequestAcception
 import com.google.android.gms.location.*
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -32,15 +33,9 @@ import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.MarkerOptions
-import dagger.Lazy
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
-import java.security.AccessController.getContext
+import okhttp3.Callback
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.Unit.toString
-import kotlin.coroutines.EmptyCoroutineContext.toString
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
@@ -51,7 +46,8 @@ class MainActivity @Inject constructor(): AppCompatActivity(),
     ISetPlace,
     IShowWait,
     IRequireNowPosition,
-    OnMapReadyCallback {
+    OnMapReadyCallback,
+    ActivityCompat.OnRequestPermissionsResultCallback{
 
     private val TAG: String = MainActivity::class.simpleName.toString()
     private val PERMISSIONS: Array<String> = arrayOf(
@@ -64,15 +60,21 @@ class MainActivity @Inject constructor(): AppCompatActivity(),
     private lateinit var context: Context
     private lateinit var infoView: TextView
     private lateinit var map: GoogleMap
+    private var fragmentManagerss: FragmentManager? = null
+    private lateinit var fragment: Fragment
+    private lateinit var categoryFragment: Fragment
 
     private lateinit var locationClient: FusedLocationProviderClient
     private lateinit var request: LocationRequest
     private lateinit var locationCallback: LocationCallback
 
+    private var categoryInitCallback: ((IGetViewCategory) -> Unit)? = null
+
 
 //    @Inject lateinit var requestAcception: ITestRequest
     @Inject lateinit var entryPoints: EntryPoints
     @Inject lateinit var requestAcception: RequestAcception
+    @Inject lateinit var usecase: Usecase
 
      companion object{
         private lateinit var instance: MainActivity
@@ -89,15 +91,23 @@ class MainActivity @Inject constructor(): AppCompatActivity(),
         Log.d(TAG, "onCreate")
         setContentView(R.layout.activity_main)
 
+        instance = this
+
+        ShowBaseMap()
+
+        //transaction.replace(com.google.android.material.R.id.container, )
+        //transaction.add(com.google.android.material.R.id.container, CategoryFragment(), "CategoryFragment")
+
         infoView = findViewById(R.id.info_view)
+
         (applicationContext as MyApplication).appComponent.inject(this)
         (applicationContext as MyApplication).firstActivity = this
 
-        ShowBaseMap()
+//        ShowBaseMap()
         locationClient = LocationServices.getFusedLocationProviderClient(this)
         request = LocationRequest.create()
-        request.interval = 10000L
-        request.fastestInterval = 5000L
+        request.interval = 3000L
+        request.fastestInterval = 3000L
         request.priority = LocationRequest.PRIORITY_BALANCED_POWER_ACCURACY
 
         locationCallback = object : LocationCallback() {
@@ -108,19 +118,18 @@ class MainActivity @Inject constructor(): AppCompatActivity(),
                 nowLocation = location
                 infoView.text = getString(R.string.latlng_format, ll.latitude, ll.longitude)
                 if (map == null) {
-                    Log.e(TAG, "onLocationResult: map == null")
+                    Log.e(TAG, "onLocationResult: map == nullです")
                     return
                 }
                 map.animateCamera(CameraUpdateFactory.newLatLng(ll))
-//                stopLocationUpdate()
+                stopLocationUpdate()
             }
         }
         startLocationUpdate(true)
-        instance = this
 //        context = this
         Log.d(TAG, "うえーい")
         Log.d(TAG, ContextCompat.checkSelfPermission(this, "AAAA").toString())
-
+        StartShowCategoryFragment()
     }
 
     override fun onStart() {
@@ -129,9 +138,18 @@ class MainActivity @Inject constructor(): AppCompatActivity(),
         //テストコード
         val handler = Handler(Looper.getMainLooper())
 
+        //あまりよくないけど、1秒無理やり待たせる
         handler.postDelayed( {
-            requestAcception.RequestAccept()
-        }, 20000L)
+            usecase.StartSelectCategory()
+//            startLocationUpdate(true)
+        }, 500L)
+
+/*        handler.postDelayed( {
+            //テスト
+            Log.d(TAG,"uyigiuygubplhuy")
+            val category = OnlyKeywordCategory("サイゼリヤ")
+            requestAcception.RequestAccept(category)
+        }, 10000L)*/
 
         Log.d(TAG, "Finish onStart")
     }
@@ -152,6 +170,65 @@ class MainActivity @Inject constructor(): AppCompatActivity(),
         Log.d(TAG, "onStop")
         super.onStop()
     }
+
+
+    // ------------ Fragment --------------
+
+    fun StartShowCategoryFragment() {
+//        transaction.commit()
+/*        val fragment = supportFragmentManager.findFragmentByTag("CategoryFragment")
+        if (fragment != null && fragment is CategoryFragment) {
+            (fragment as CategoryFragment).commit
+        }
+
+ */
+
+        Log.d(TAG, "Show Fragment")
+
+        categoryFragment = CategoryFragment()
+        val fragmentTransaction = supportFragmentManager.beginTransaction()
+//        transaction.replace(R.id.fragment_frame, categoryFragment)
+        fragmentTransaction.add(R.id.fragment_frame, categoryFragment)
+//            .setReorderingAllowed(true)
+//            .addToBackStack("category")
+            .commit()
+
+    }
+
+    fun AddCategoryToFragment(newCategory: List<IGetViewCategory>) {
+        if(fragmentManagerss == null){
+            fragmentManagerss = supportFragmentManager
+            fragment = fragmentManagerss?.findFragmentById(R.id.fragment_frame) ?: kotlin.run {
+                throw NullPointerException("フラグメントねーぞ")
+            }
+        }
+
+        if(fragment is CategoryFragment){
+            val categoryFragment = fragment as CategoryFragment
+            if(categoryInitCallback != null) {
+                categoryFragment.AddCategory(newCategory, categoryInitCallback!!)
+            } else {
+                throw NullPointerException("まだカテゴリコールバックが渡せてない...")
+            }
+        } else {
+            throw NullPointerException("フラグメントないど")
+        }
+    }
+
+    fun FinishShowCategoryFragment() {
+        Log.d(TAG,"fragment消します")
+        val fragmentTransaction = supportFragmentManager.beginTransaction()
+        fragmentTransaction.remove(categoryFragment)
+            .commit()
+    }
+
+
+    fun ProvideCategoryCallback(callback: ((category: IGetViewCategory) -> Unit)) {
+        categoryInitCallback = callback
+    }
+
+
+    // ------------ Map ------------------
 
     @SuppressLint("MissingPermission")
     override fun onMapReady(map: GoogleMap) {
@@ -184,6 +261,53 @@ class MainActivity @Inject constructor(): AppCompatActivity(),
         }*/
     }
 
+
+    @SuppressLint("MissingPermission")
+    private fun enableMyLocation() {
+
+        // 1. Check if permissions are granted, if so, enable the my location layer
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            this.map.isMyLocationEnabled = true
+
+            return
+        }
+
+        // 2. If if a permission rationale dialog should be shown
+        if (ActivityCompat.shouldShowRequestPermissionRationale(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) || ActivityCompat.shouldShowRequestPermissionRationale(
+                this,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+        ) {
+/*            PermissionUtils.RationaleDialog.newInstance(
+                LOCATION_PERMISSION_REQUEST_CODE, true
+            ).show(supportFragmentManager, "dialog")*/
+            return
+        }
+
+        // 3. Otherwise, request permission
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ),
+            REQ_PERMISSIONS
+        )
+    }
+
+
+
+
     fun AddNewPeg(destination: Destination) {
         map.addMarker(destination.markerOptions)
     }
@@ -199,6 +323,9 @@ class MainActivity @Inject constructor(): AppCompatActivity(),
         }
     }
 
+    /*
+    現在仕様してません。
+     */
     override suspend fun RequireNowPosition(): Location {
         return suspendCoroutine { continuation ->
 /*            locationCallback = object: LocationCallback() {
@@ -273,6 +400,8 @@ class MainActivity @Inject constructor(): AppCompatActivity(),
                 break
             }
         }
+        locationClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
+        Log.d(TAG, "おーーーーーーーーーーーーーーーーーーーーーーーーーーーう")
         locationClient.lastLocation.addOnSuccessListener { location: Location? ->
             Log.d(TAG,"BBBBBBBBBBBBBBBBBBBBBBBBB")
             if(location != null){
@@ -291,13 +420,35 @@ class MainActivity @Inject constructor(): AppCompatActivity(),
      */
     override fun onRequestPermissionsResult(
         requestCode: Int,
-        permissions: Array<out String>,
+        permissions: Array<String>,
         grantResults: IntArray
     ) {
-        if (requestCode == REQ_PERMISSIONS){
-            startLocationUpdate(false)
+        if (requestCode != REQ_PERMISSIONS) {
+            super.onRequestPermissionsResult(
+                requestCode,
+                permissions,
+                grantResults
+            )
+            return
+        }
+
+        if (isPermissionGranted(
+                permissions,
+                grantResults,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) || isPermissionGranted(
+                permissions,
+                grantResults,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+        ) {
+            // Enable the my location layer if the permission has been granted.
+            enableMyLocation()
         } else {
-            super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+            // Permission was denied. Display an error message
+            // Display the missing permission error dialog when the fragments resume.
+
+            // 許可が降りなかったら...
         }
     }
 
@@ -310,4 +461,25 @@ class MainActivity @Inject constructor(): AppCompatActivity(),
     }
 
 
+
+    fun isPermissionGranted(
+        grantPermissions: Array<String>, grantResults: IntArray,
+        permission: String
+    ): Boolean {
+        for (i in grantPermissions.indices) {
+            if (permission == grantPermissions[i]) {
+                return grantResults[i] == PackageManager.PERMISSION_GRANTED
+            }
+        }
+        return false
+    }
+
+
+    fun ZoomMap(magnitude: Float) {
+        if(nowLocation != null) {
+            map.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(nowLocation?.latitude!!, nowLocation?.longitude!!), magnitude))
+        } else {
+            map.animateCamera(CameraUpdateFactory.zoomBy(magnitude))
+        }
+    }
 }
